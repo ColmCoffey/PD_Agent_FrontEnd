@@ -52,6 +52,14 @@ function App() {
                 }
                 const data = await res.json();
                 console.log("PDF list data received:", data);
+                
+                // Check if the response contains an error message despite 200 status
+                if (data.errorMessage || data.errorType) {
+                    const errorDetail = data.errorMessage || 'Unknown error occurred';
+                    console.error("PDF list API returned an error with 200 status:", errorDetail);
+                    throw new Error(`API Error: ${errorDetail}`);
+                }
+                
                 setAvailablePdfs(data.pdfs || []);
             } catch (e: any) {
                 console.error("Failed to fetch PDFs:", e);
@@ -100,6 +108,20 @@ function App() {
 
             const responseData = await res.json();
             console.log("Query submission response data:", responseData);
+            
+            // Check if the response contains an error message despite 200 status
+            if (responseData.errorMessage || responseData.errorType) {
+              const errorDetail = responseData.errorMessage || 'Unknown error occurred';
+              console.error("API returned an error with 200 status:", errorDetail);
+              throw new Error(`API Error: ${errorDetail}`);
+            }
+            
+            // Check if query_id exists
+            if (!responseData.query_id) {
+              console.error("No query_id in response:", responseData);
+              throw new Error("Failed to get query ID from server");
+            }
+            
             const { query_id } = responseData;
             
             // Poll for results
