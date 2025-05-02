@@ -13,12 +13,13 @@ interface QueryResponse {
 }
 
 // Define the API base URL (adjust if backend runs elsewhere)
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://rih26zlcc2.execute-api.eu-central-1.amazonaws.com/prod';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'fetch("https://pp14rjbbl8.execute-api.eu-central-1.amazonaws.com/PD_Prod/api/pdf/list")';
 
 function App() {
     const [availablePdfs, setAvailablePdfs] = useState<string[]>([]);
     const [query, setQuery] = useState<string>('');
     const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [pollingStatus, setPollingStatus] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
     const [response, setResponse] = useState<QueryResponse | null>(null);
 
@@ -56,14 +57,15 @@ function App() {
         setIsLoading(true);
         setError(null);
         setResponse(null); // Clear previous response
+        setPollingStatus('Submitting query...');
 
         try {
-            const res = await fetch(`${API_BASE_URL}/api/literature/query`, {
+            const res = await fetch(`${API_BASE_URL}/submit_query`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ query: query }), // Send query in request body
+                body: JSON.stringify({ query_text: query }), // Send query in request body
             });
 
             if (!res.ok) {
@@ -76,11 +78,36 @@ function App() {
                 throw new Error(errorDetail);
             }
 
-            const data: QueryResponse = await res.json();
-            setResponse(data);
+            const { query_id } = await res.json();
+            
+            // Poll for results
+            setPollingStatus('Processing query...');
+            let pollCount = 0;
+            let result;
+            while (true) {
+              pollCount++;
+              const pollRes = await fetch(`${API_BASE_URL}/get_query?query_id=${query_id}`);
+              result = await pollRes.json();
+              if (result.is_complete) break;
+              
+              // Update status message with count to show progress
+              setPollingStatus(`Processing query... (check ${pollCount})`);
+              await new Promise(resolve => setTimeout(resolve, 2500)); // 2.5 seconds delay
+            }
+            
+            setPollingStatus('');
+            // Transform backend response to match expected frontend structure
+            setResponse({
+              answer: result.answer_text,
+              sources: result.sources.map((src: string) => ({
+                source: src.split(':')[0],  // filename
+                content: `Referenced at ${src}` // placeholder or extract real text if possible
+              }))
+            });
         } catch (e: any) {
             console.error("Failed to submit query:", e);
-            setError(`Error getting answer: ${e.message}`);
+            setError(`Error submitting query: ${e.message}`);
+            setPollingStatus('');
         } finally {
             setIsLoading(false);
         }
@@ -124,7 +151,7 @@ function App() {
                     </form>
                 </section>
 
-                {isLoading && !response && <p>Fetching answer...</p>} {/* Show loading only when submitting query */}
+                {isLoading && !response && <p>{pollingStatus || 'Fetching answer...'}</p>} {/* Show detailed loading status */}
                 {error && !isLoading && <p className="error">{error}</p>} {/* Show query errors */}
 
                 {response && (
