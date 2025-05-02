@@ -15,7 +15,18 @@ interface QueryResponse {
 // Define the API base URL (adjust if backend runs elsewhere)
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://pp14rjbbl8.execute-api.eu-central-1.amazonaws.com/PD_Prod';
 
-console.log("API_BASE_URL at runtime:", API_BASE_URL);
+// Normalize API URL - ensure it doesn't have duplicate path segments
+const normalizeUrl = (url: string) => {
+  // If environment URL doesn't contain stage path, assume it needs /PD_Prod
+  if (url.includes('execute-api.eu-central-1.amazonaws.com') && !url.includes('/PD_Prod')) {
+    return `${url}/PD_Prod`;
+  }
+  return url;
+};
+
+const NORMALIZED_API_URL = normalizeUrl(API_BASE_URL);
+
+console.log("API_BASE_URL at runtime:", NORMALIZED_API_URL);
 console.log("process.env.REACT_APP_API_URL =", process.env.REACT_APP_API_URL);
 
 
@@ -34,11 +45,13 @@ function App() {
             setIsLoading(true);
             setError(null);
             try {
-                const res = await fetch(`${API_BASE_URL}/api/pdf/list`);
+                const res = await fetch(`${NORMALIZED_API_URL}/api/pdf/list`);
+                console.log("PDF list API response status:", res.status);
                 if (!res.ok) {
                     throw new Error(`HTTP error! status: ${res.status}`);
                 }
                 const data = await res.json();
+                console.log("PDF list data received:", data);
                 setAvailablePdfs(data.pdfs || []);
             } catch (e: any) {
                 console.error("Failed to fetch PDFs:", e);
@@ -65,25 +78,29 @@ function App() {
         setPollingStatus('Submitting query...');
 
         try {
-            const res = await fetch(`${API_BASE_URL}/submit_query`, {
+            const res = await fetch(`${NORMALIZED_API_URL}/submit_query`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({ query_text: query }), // Send query in request body
             });
+            console.log("Query submission response status:", res.status);
 
             if (!res.ok) {
                 // Try to get error details from response body
                 let errorDetail = `HTTP error! status: ${res.status}`;
                 try {
                     const errorData = await res.json();
+                    console.log("Error response data:", errorData);
                     errorDetail = errorData.detail || errorDetail;
                 } catch { /* Ignore if response body is not JSON */ }
                 throw new Error(errorDetail);
             }
 
-            const { query_id } = await res.json();
+            const responseData = await res.json();
+            console.log("Query submission response data:", responseData);
+            const { query_id } = responseData;
             
             // Poll for results
             setPollingStatus('Processing query...');
@@ -91,8 +108,10 @@ function App() {
             let result;
             while (true) {
               pollCount++;
-              const pollRes = await fetch(`${API_BASE_URL}/get_query?query_id=${query_id}`);
+              const pollRes = await fetch(`${NORMALIZED_API_URL}/get_query?query_id=${query_id}`);
+              console.log(`Poll attempt ${pollCount}: Response status:`, pollRes.status);
               result = await pollRes.json();
+              console.log(`Poll attempt ${pollCount}: Data received:`, result);
               if (result.is_complete) break;
               
               // Update status message with count to show progress
@@ -102,12 +121,13 @@ function App() {
             
             setPollingStatus('');
             // Transform backend response to match expected frontend structure
+            console.log("Final result data before processing:", result);
             setResponse({
               answer: result.answer_text,
-              sources: result.sources.map((src: string) => ({
+              sources: result.sources ? result.sources.map((src: string) => ({
                 source: src.split(':')[0],  // filename
                 content: `Referenced at ${src}` // placeholder or extract real text if possible
-              }))
+              })) : []
             });
         } catch (e: any) {
             console.error("Failed to submit query:", e);
