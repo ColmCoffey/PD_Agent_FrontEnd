@@ -15,6 +15,11 @@ interface QueryResponse {
 // Define the API base URL (adjust if backend runs elsewhere)
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://pp14rjbbl8.execute-api.eu-central-1.amazonaws.com/PD_Prod';
 
+console.log("API_BASE_URL at runtime:", API_BASE_URL);
+console.log("process.env.REACT_APP_API_URL =", process.env.REACT_APP_API_URL);
+
+
+
 function App() {
     const [availablePdfs, setAvailablePdfs] = useState<string[]>([]);
     const [query, setQuery] = useState<string>('');
